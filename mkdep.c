@@ -87,7 +87,7 @@ deconst(const void *p)
 	return (const char *)p - (const char *)0 + (char *)0;
 }
 
-__dead static void
+__dead2 static void
 usage(void)
 {
 	(void)fprintf(stderr,

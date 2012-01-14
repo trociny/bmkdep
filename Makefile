@@ -2,8 +2,12 @@
 #	@(#)Makefile	8.1 (Berkeley) 6/6/93
 
 #CFLAGS+=-g
-MAN=	mkdep.1
-PROG=	mkdep
+MAN=	bmkdep.1
+PROG=	bmkdep
 SRCS=	mkdep.c findcc.c
+
+PREFIX?=	/usr/local
+BINDIR=		${PREFIX}/bin
+MANDIR=		${PREFIX}/man/man
 
 .include <bsd.prog.mk>
