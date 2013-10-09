@@ -1,0 +1,9 @@
+2013-10-09  Mikolaj Golub <to.my.trociny@gmail.com>
+
+        * Merge with NetBSD mkdep, pick up
+          o Add a new "-P prefix" option to mkdep(1).
+          o Add -i and -v.
+
+2012-01-14  Mikolaj Golub <to.my.trociny@gmail.com>
+
+        * Imported NetBSD's -current mkdep(1) and resolve conflicts.
