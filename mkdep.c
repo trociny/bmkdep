@@ -1,4 +1,4 @@
-/* $NetBSD: mkdep.c,v 1.40 2011/09/04 20:30:06 joerg Exp $ */
+/* $NetBSD: mkdep.c,v 1.43 2013/03/05 21:57:47 christos Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 #if !defined(lint)
 __COPYRIGHT("@(#) Copyright (c) 1999 The NetBSD Foundation, Inc.\
  All rights reserved.");
-__RCSID("$NetBSD: mkdep.c,v 1.40 2011/09/04 20:30:06 joerg Exp $");
+__RCSID("$NetBSD: mkdep.c,v 1.43 2013/03/05 21:57:47 christos Exp $");
 #endif /* not lint */
 
 #include <sys/mman.h>
@@ -49,6 +49,7 @@ __RCSID("$NetBSD: mkdep.c,v 1.40 2011/09/04 20:30:06 joerg Exp $");
 #include <getopt.h>
 #include <locale.h>
 #include <paths.h>
+#define _WITH_DPRINTF
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,12 +75,13 @@ typedef struct suff_list {
 /* tree of includes for -o processing */
 static opt_t *opt;
 static int width;
+static int verbose;
 
 #define DEFAULT_PATH		_PATH_DEFPATH
 #define DEFAULT_FILENAME	".depend"
 
 static void save_for_optional(const char *, const char *);
-static int write_optional(int, opt_t *, int);
+static size_t write_optional(int, opt_t *, size_t);
 
 static inline void *
 deconst(const void *p)
@@ -91,7 +93,8 @@ __dead2 static void
 usage(void)
 {
 	(void)fprintf(stderr,
-	    "usage: %s [-aDdopq] [-f file] [-s suffixes] -- [flags] file ...\n",
+	    "usage: %s [-aDdiopqv] [-f file] [-P prefix] [-s suffixes] "
+	    "-- [flags] file ...\n",
 	    getprogname());
 	exit(EXIT_FAILURE);
 }
@@ -130,6 +133,13 @@ run_cc(int argc, char **argv, const char **fname)
 		    tmpfilename);
 	(void)unlink(tmpfilename);
 	*fname = tmpfilename;
+
+	if (verbose) {
+		char **a;
+		for (a = args; *a; a++)
+			printf("%s ", *a);
+		printf("\n");
+	}
 
 	switch (cpid = vfork()) {
 	case 0:
@@ -207,7 +217,7 @@ addsuff(suff_list_t **l, const char *s, size_t len)
 int
 main(int argc, char **argv)
 {
-	int 	aflag, dflag, oflag, qflag;
+	int 	aflag, dflag, iflag, oflag, qflag;
 	const char *filename;
 	int	dependfile;
 	char	*buf, *lim, *ptr, *line, *suf, *colon, *eol;
@@ -216,6 +226,7 @@ main(int argc, char **argv)
 	int	fd;
 	size_t  slen;
 	const char *fname;
+	const char *prefix = NULL;
 	const char *suffixes = NULL, *s;
 	suff_list_t *suff_list = NULL, *sl;
 
@@ -227,6 +238,7 @@ main(int argc, char **argv)
 
 	aflag = O_WRONLY | O_APPEND | O_CREAT | O_TRUNC;
 	dflag = 0;
+	iflag = 0;
 	oflag = 0;
 	qflag = 0;
 	filename = DEFAULT_FILENAME;
@@ -235,7 +247,7 @@ main(int argc, char **argv)
 	opterr = 0;	/* stop getopt() bleating about errors. */
 	for (;;) {
 		ok_ind = optind;
-		ch = getopt_long(argc, argv, "aDdf:opqRs:", longopt, NULL);
+		ch = getopt_long(argc, argv, "aDdf:ioP:pqRs:v", longopt, NULL);
 		switch (ch) {
 		case -1:
 			ok_ind = optind;
@@ -254,8 +266,14 @@ main(int argc, char **argv)
 		case 'f':	/* Name of output file */
 			filename = optarg;
 			continue;
+		case 'i':
+			iflag = 1;
+			continue;
 		case 'o':	/* Mark dependent files .OPTIONAL */
 			oflag = 1;
+			continue;
+		case 'P':	/* Prefix for each target filename */
+			prefix = optarg;
 			continue;
 		case 'p':	/* Program mode (x.o: -> x:) */
 			suffixes = "";
@@ -268,6 +286,9 @@ main(int argc, char **argv)
 			continue;
 		case 's':	/* Suffix list */
 			suffixes = optarg;
+			continue;
+		case 'v':
+			verbose = 1;
 			continue;
 		default:
 			if (dflag)
@@ -297,8 +318,7 @@ main(int argc, char **argv)
 
 	dependfile = open(filename, aflag, 0666);
 	if (dependfile == -1)
-		err(EXIT_FAILURE, "unable to %s to file %s\n",
-		    aflag & O_TRUNC ? "write" : "append", filename);
+		goto wrerror;
 
 	while (dflag == 2 || *argv != NULL) {
 		if (dflag) {
@@ -308,6 +328,12 @@ main(int argc, char **argv)
 					break;
 			} else
 				fname = *argv++;
+			if (iflag) {
+				if (dprintf(dependfile, ".-include \"%s\"\n",
+				    fname) < 0)
+					goto wrerror;
+				continue;
+			}
 			fd = open(fname, O_RDONLY, 0);
 			if (fd == -1) {
 				if (!qflag)
@@ -361,7 +387,8 @@ main(int argc, char **argv)
 			}
 			if (isspace((unsigned char)*line) || colon == NULL) {
 				/* No dependency - just transcribe line */
-				write(dependfile, line, eol - line);
+				if (write(dependfile, line, eol - line) < 0)
+					goto wrerror;
 				line = eol;
 				continue;
 			}
@@ -400,13 +427,30 @@ main(int argc, char **argv)
 				for (sl = suff_list; sl != NULL; sl = sl->next)
 				{
 					if (sl != suff_list)
-						write(dependfile, " ", 1);
-					write(dependfile, line, suf - line);
-					write(dependfile, sl->suff, sl->len);
+						if (write(dependfile, " ", 1)
+						    < 0)
+							goto wrerror;
+					if (prefix != NULL)
+						if (write(dependfile, prefix,
+						    strlen(prefix)) < 0)
+							goto wrerror;
+					if (write(dependfile, line,
+					    suf - line) < 0)
+						goto wrerror;
+					if (write(dependfile, sl->suff,
+					    sl->len) < 0)
+						goto wrerror;
 				}
-				write(dependfile, colon, eol - colon);
-			} else
-				write(dependfile, line, eol - line);
+				if (write(dependfile, colon, eol - colon) < 0)
+					goto wrerror;
+			} else {
+				if (prefix != NULL)
+					if (write(dependfile, prefix,
+					    strlen(prefix)) < 0)
+						goto wrerror;
+				if (write(dependfile, line, eol - line) < 0)
+					goto wrerror;
+			}
 
 			if (oflag)
 				save_for_optional(colon + 1, eol);
@@ -416,15 +460,21 @@ main(int argc, char **argv)
 	}
 
 	if (oflag && opt != NULL) {
-		write(dependfile, ".OPTIONAL:", 10);
+		if (write(dependfile, ".OPTIONAL:", 10) < 0)
+			goto wrerror;
 		width = 9;
 		sz = write_optional(dependfile, opt, 0);
+		if (sz == (size_t)-1)
+			goto wrerror;
 		/* 'depth' is about 39 for an i386 kernel */
 		/* fprintf(stderr, "Recursion depth %d\n", sz); */
 	}
 	close(dependfile);
 
 	exit(EXIT_SUCCESS);
+wrerror:
+	err(EXIT_FAILURE, "unable to %s to file %s\n",
+	    aflag & O_TRUNC ? "write" : "append", filename);
 }
 
 
@@ -481,19 +531,21 @@ save_for_optional(const char *start, const char *limit)
 	}
 }
 
-static int
-write_optional(int fd, opt_t *node, int depth)
+static size_t
+write_optional(int fd, opt_t *node, size_t depth)
 {
-	int d1 = ++depth;
+	size_t d1 = ++depth;
 
 	if (node->left)
 		d1 = write_optional(fd, node->left, d1);
 	if (width > 76 - node->len) {
-		write(fd, " \\\n ", 4);
+		if (write(fd, " \\\n ", 4) < 0)
+			return (size_t)-1;
 		width = 1;
 	}
 	width += 1 + node->len;
-	write(fd, node->name, 1 + node->len);
+	if (write(fd, node->name, 1 + node->len) < 0)
+		return (size_t)-1;
 	if (node->right)
 		depth = write_optional(fd, node->right, depth);
 	return d1 > depth ? d1 : depth;
