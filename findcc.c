@@ -33,12 +33,13 @@
 #include "nbtool_config.h"
 #endif
 
-#include <sys/cdefs.h>
+#if 0
 #if !defined(lint)
 __COPYRIGHT("@(#) Copyright (c) 1999 The NetBSD Foundation, Inc.\
  All rights reserved.");
 __RCSID("$NetBSD: findcc.c,v 1.6 2011/09/04 20:30:06 joerg Exp $");
 #endif /* not lint */
+#endif
 
 #include <sys/param.h>
 #include <stdio.h>
