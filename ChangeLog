@@ -1,3 +1,8 @@
+2013-12-15  Mikolaj Golub <to.my.trociny@gmail.com>
+
+        * Apply patches from pkgsrc project to make it compile on Linux
+          and Solaris (thanks to Aleksey Cheusov).
+
 2013-10-09  Mikolaj Golub <to.my.trociny@gmail.com>
 
         * Merge with NetBSD mkdep, pick up
