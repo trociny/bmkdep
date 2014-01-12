@@ -52,7 +52,6 @@ __RCSID("$NetBSD: mkdep.c,v 1.43 2013/03/05 21:57:47 christos Exp $");
 
 #ifndef __sun
 #include <paths.h>
-#define _WITH_DPRINTF
 #endif
 
 #include <stdio.h>
@@ -343,14 +342,9 @@ main(int argc, char **argv)
 			} else
 				fname = *argv++;
 			if (iflag) {
-#ifdef _WITH_DPRINTF
-				if (dprintf(dependfile, ".-include \"%s\"\n",
-				    fname) < 0)
-#else
 				snprintf (incl, sizeof (incl),
 				    ".-include \"%s\"\n", fname);
 				if (write(dependfile, incl, strlen(incl)) < 0)
-#endif
 					goto wrerror;
 				continue;
 			}

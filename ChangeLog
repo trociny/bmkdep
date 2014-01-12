@@ -1,3 +1,8 @@
+2014-01-12  Mikolaj Golub <to.my.trociny@gmail.com>
+
+        * Get rid of dprintf dependency, for portability
+	  (thanks to Aleksey Cheusov).
+
 2013-12-15  Mikolaj Golub <to.my.trociny@gmail.com>
 
         * Apply patches from pkgsrc project to make it compile on Linux
